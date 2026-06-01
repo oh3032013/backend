@@ -84,3 +84,6 @@ app.listen(PORT, () => {
   console.log(`🎮 Welcome to OmarXGaming Backend API hub`);
   console.log(`==================================================`);
 });
+
+// كود الـ app.listen القديم اتركها كما هي، فقط أضف هذا السطر في آخر الملف تماماً:
+export default app;
