@@ -16,7 +16,7 @@ import adminRoutes from './routes/admin.js';
 // 1. إعداد الإعدادات البيئية أولاً
 dotenv.config();
 
-// 2. تعريف الـ app
+// 2. تعريف الـ app والـ Port
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -25,7 +25,7 @@ app.use('/projects', express.static(path.join(__dirname, 'public/projects')));
 app.use('/portfolio', express.static(path.join(__dirname, 'public/portfolio')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// 4. إعداد الـ i18next
+// 4. إعداد الـ i18next للغات
 i18next.use(middleware.LanguageDetector).init({
   preload: ['en', 'ar'],
   fallbackLng: 'en',
@@ -51,7 +51,7 @@ i18next.use(middleware.LanguageDetector).init({
   }
 });
 
-// إعدادات CORS
+// 5. إعدادات الـ CORS والـ Middlewares
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -61,11 +61,12 @@ app.use(cors({
 app.use(express.json());
 app.use(middleware.handle(i18next));
 
-// المسارات (Routes)
+// 6. المسارات الأساسية (Routes)
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/admin', adminRoutes);
 
+// 7. المسار الترحيبي الرئيسي (يقبل الـ / مباشرة)
 app.get('/', (req, res) => {
   res.json({
     message: req.t('server_running'),
@@ -74,26 +75,20 @@ app.get('/', (req, res) => {
   });
 });
 
+// 8. معالجة المسارات غير الموجودة (404)
 app.use((req, res) => {
   res.status(404).json({ success: false, message: req.t('route_not_found') });
 });
 
-app.listen(PORT, () => {
-  console.log(`==================================================`);
-  console.log(`🚀 Server is flying on port: ${PORT}`);
-  console.log(`🎮 Welcome to OmarXGaming Backend API hub`);
-  console.log(`==================================================`);
-});
-
-app.get('/', (req, res) => {
-    res.send('Server is running successfully! 🚀');
-});
-
-// لو كود الـ listen عندك شبه كده، خليه يتحقق الأول هو شغال فين:
+// 9. تشغيل الـ listen محلياً فقط (عشان ما يضربش كراش على Vercel)
 if (process.env.NODE_ENV !== 'production') {
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`==================================================`);
+    console.log(`🚀 Server is flying locally on port: ${PORT}`);
+    console.log(`🎮 Welcome to OmarXGaming Backend API hub`);
+    console.log(`==================================================`);
+  });
 }
 
-// وتأكد إن السطر ده في آخر الملف تماماً:
+// 10. تصدير الـ app لـ Vercel
 export default app;
