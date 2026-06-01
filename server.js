@@ -85,5 +85,8 @@ app.listen(PORT, () => {
   console.log(`==================================================`);
 });
 
+app.get('/', (req, res) => {
+    res.send('Server is running successfully! 🚀');
+});
 // كود الـ app.listen القديم اتركها كما هي، فقط أضف هذا السطر في آخر الملف تماماً:
 export default app;
