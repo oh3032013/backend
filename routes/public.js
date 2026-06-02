@@ -25,7 +25,7 @@ router.get('/portfolio', async (req, res) => {
   }
 });
 
-// 1. جلب إحصائيات القناة
+// 1. جلب إحصائيات القناة العامة
 router.get('/stats', async (req, res) => {
   try {
     const data = await readData();
@@ -35,7 +35,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// 2. جلب الفيديوهات
+// 2. جلب قائمة الفيديوهات العامة
 router.get('/videos', async (req, res) => {
   try {
     const data = await readData();
@@ -45,7 +45,7 @@ router.get('/videos', async (req, res) => {
   }
 });
 
-// 3. جلب جميع البيانات العامة دفعة واحدة
+// 3. جلب جميع البيانات العامة دفعة واحدة للـ Frontend
 router.get('/all', async (req, res) => {
   try {
     const data = await readData();
@@ -64,7 +64,7 @@ router.get('/all', async (req, res) => {
   }
 });
 
-// 4. إرسال رسالة من نموذج الاتصال
+// 4. نموذج الاتصال وحفظ الرسائل في jsonbin
 router.post('/contact', async (req, res) => {
   try {
     const { name, email, company, message } = req.body;
