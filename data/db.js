@@ -1,15 +1,13 @@
 import axios from 'axios';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
+// قراءة المتغيرات مباشرة من البيئة (سواء فيرسيل أو ملف local)
 const BIN_URL = process.env.BIN_URL;
 const MASTER_KEY = process.env.MASTER_KEY;
 
 export const readData = async () => {
   try {
     if (!BIN_URL || !MASTER_KEY) {
-      throw new Error("Missing BIN_URL or MASTER_KEY in environment variables");
+      throw new Error(`Missing BIN_URL or MASTER_KEY in environment variables. Check Vercel Settings!`);
     }
     const response = await axios.get(BIN_URL, {
       headers: {
@@ -26,7 +24,7 @@ export const readData = async () => {
 export const writeData = async (newData) => {
   try {
     if (!BIN_URL || !MASTER_KEY) {
-      throw new Error("Missing BIN_URL or MASTER_KEY in environment variables");
+      throw new Error(`Missing BIN_URL or MASTER_KEY in environment variables. Check Vercel Settings!`);
     }
     await axios.put(BIN_URL, newData, {
       headers: {
