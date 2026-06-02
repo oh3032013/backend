@@ -1,12 +1,10 @@
 import express from 'express';
 import { readData, writeData } from '../data/db.js';
-import fs from 'fs';
-import path from 'path';
 
 const router = express.Router();
 
 // [GET] جلب جميع المشاريع للواجهة الأمامية
-router.get('/projects', (req, res) => {
+router.get('/projects', async (req, res) => {
   try {
     const data = await readData();
     const projects = data.projects || [];
@@ -17,7 +15,7 @@ router.get('/projects', (req, res) => {
 });
 
 // [GET] مسار /portfolio للتوافق مع الواجهة
-router.get('/portfolio', (req, res) => {
+router.get('/portfolio', async (req, res) => {
   try {
     const data = await readData();
     const projects = data.projects || [];
@@ -28,7 +26,7 @@ router.get('/portfolio', (req, res) => {
 });
 
 // 1. جلب إحصائيات القناة
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const data = await readData();
     res.json({ success: true, stats: data.stats });
@@ -38,7 +36,7 @@ router.get('/stats', (req, res) => {
 });
 
 // 2. جلب الفيديوهات
-router.get('/videos', (req, res) => {
+router.get('/videos', async (req, res) => {
   try {
     const data = await readData();
     res.json({ success: true, videos: data.videos });
@@ -48,7 +46,7 @@ router.get('/videos', (req, res) => {
 });
 
 // 3. جلب جميع البيانات العامة دفعة واحدة
-router.get('/all', (req, res) => {
+router.get('/all', async (req, res) => {
   try {
     const data = await readData();
     res.json({
@@ -67,7 +65,7 @@ router.get('/all', (req, res) => {
 });
 
 // 4. إرسال رسالة من نموذج الاتصال
-router.post('/contact', (req, res) => {
+router.post('/contact', async (req, res) => {
   try {
     const { name, email, company, message } = req.body;
 
@@ -89,7 +87,8 @@ router.post('/contact', (req, res) => {
 
     if (!data.messages) data.messages = [];
     data.messages.push(newMessage);
-    writeData(data);
+    
+    await writeData(data);
 
     res.json({ success: true, message: 'تم إرسال رسالتك بنجاح! سيقوم عمر بالتواصل معك قريباً 🚀' });
   } catch (error) {
