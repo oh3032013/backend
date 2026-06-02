@@ -51,12 +51,23 @@ i18next.use(middleware.LanguageDetector).init({
   }
 });
 
-// 5. إعدادات الـ CORS والـ Middlewares
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept-Language']
-}));
+// 5. إعدادات الـ CORS اليدوية الصارمة (لإجبار Vercel على تمرير الـ Headers)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, Accept-Language'
+  );
+  
+  // معالجة طلب الـ Preflight (OPTIONS) اللي المتصفح بيبعته تلقائياً
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  next();
+});
 
 app.use(express.json());
 app.use(middleware.handle(i18next));
