@@ -6,7 +6,6 @@ import path from 'path';
 import multer from 'multer';
 
 const router = express.Router();
-const dbPath = path.resolve('db.json');
 
 // ============== إعداد Multer أولاً ==============
 const projectStorage = multer.diskStorage({
@@ -27,8 +26,8 @@ const projectUpload = multer({ storage: projectStorage });
 
 // ============== مسارات المشاريع (Projects) ==============
 
-// [GET] جلب جميع المشاريع
-router.get('/projects', verifyToken, (req, res) => {
+// [GET] جلب جميع المشاريع للوحة التحكم
+router.get('/projects', verifyToken, async (req, res) => {
   try {
     const data = await readData();
     const projects = data.projects || [];
@@ -40,12 +39,8 @@ router.get('/projects', verifyToken, (req, res) => {
 });
 
 // [POST] إضافة مشروع جديد
-router.post('/projects', verifyToken, projectUpload.single('image'), (req, res) => {
+router.post('/projects', verifyToken, projectUpload.single('image'), async (req, res) => {
   try {
-    console.log('=== POST /projects ===');
-    console.log('Body:', req.body);
-    console.log('File:', req.file);
-    
     const data = await readData();
     if (!data.projects) data.projects = [];
 
@@ -70,7 +65,7 @@ router.post('/projects', verifyToken, projectUpload.single('image'), (req, res) 
     }
 
     data.projects.push(newProject);
-    writeData(data);
+    await writeData(data);
 
     res.status(201).json({ success: true, message: 'تم إضافة المشروع بنجاح!', project: newProject });
   } catch (error) {
@@ -80,7 +75,7 @@ router.post('/projects', verifyToken, projectUpload.single('image'), (req, res) 
 });
 
 // [DELETE] حذف مشروع
-router.delete('/projects/:id', verifyToken, (req, res) => {
+router.delete('/projects/:id', verifyToken, async (req, res) => {
   try {
     const data = await readData();
     const index = data.projects.findIndex(p => p.id == req.params.id);
@@ -92,12 +87,12 @@ router.delete('/projects/:id', verifyToken, (req, res) => {
     if (data.projects[index].image) {
       const imagePath = path.join(process.cwd(), 'public', data.projects[index].image);
       if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
+        try { fs.unlinkSync(imagePath); } catch (e) { console.log("File clean fallback"); }
       }
     }
 
     data.projects.splice(index, 1);
-    writeData(data);
+    await writeData(data);
     res.json({ success: true, message: 'تم حذف المشروع بنجاح' });
   } catch (error) {
     console.error('Error:', error);
@@ -105,13 +100,21 @@ router.delete('/projects/:id', verifyToken, (req, res) => {
   }
 });
 
-// ============== مسارات الـ Portfolio القديمة (للحفاظ على التوافق) ==============
+// ============== مسارات التوافق مع الواجهة (Portfolio القديم) ==============
 
-// [POST] إضافة مشروع جديد (للتوافق مع الواجهة القديمة)
-router.post('/portfolio', projectUpload.single('media'), (req, res) => {
+router.get('/portfolio', verifyToken, async (req, res) => {
   try {
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    if (!db.projects) db.projects = [];
+    const data = await readData();
+    res.json({ success: true, projects: data.projects || [] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء جلب المشاريع' });
+  }
+});
+
+router.post('/portfolio', verifyToken, projectUpload.single('media'), async (req, res) => {
+  try {
+    const data = await readData();
+    if (!data.projects) data.projects = [];
 
     const { title, description, notes, link, mediaType, youtubeId, youtubeUrl } = req.body;
 
@@ -134,91 +137,58 @@ router.post('/portfolio', projectUpload.single('media'), (req, res) => {
       newItem.mediaType = req.file.mimetype.startsWith('video') ? 'video' : 'image';
     }
 
-    db.projects.push(newItem);
-    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+    data.projects.push(newItem);
+    await writeData(data);
     res.status(201).json({ success: true, message: 'تم إضافة المشروع بنجاح! 🚀', item: newItem });
   } catch (error) {
-    console.error('Error adding project:', error);
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء حفظ المشروع' });
   }
 });
 
-// [DELETE] حذف مشروع (للتوافق)
-router.delete('/portfolio/:id', (req, res) => {
+// ============== بقية مسارات الإدارة (الإحصائيات، الفيديوهات، الإعدادات) ==============
+
+// 1. جلب الإحصائيات
+router.get('/stats', verifyToken, async (req, res) => {
   try {
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    const index = db.projects.findIndex(p => p.id == req.params.id);
-    if (index === -1) return res.status(404).json({ success: false, message: 'المشروع غير موجود' });
-
-    const item = db.projects[index];
-    if (item.mediaUrl) {
-      const mediaPath = path.join('./public', item.mediaUrl);
-      if (fs.existsSync(mediaPath)) fs.unlinkSync(mediaPath);
-    }
-
-    db.projects.splice(index, 1);
-    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
-    res.json({ success: true, message: 'تم الحذف بنجاح 🗑️' });
+    const data = await readData();
+    res.json({ success: true, stats: data.stats || { subscribers: 0, views: 0, videos: 0 } });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'تعذر الحذف' });
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء جلب الإحصائيات' });
   }
-});
-
-// [GET] جلب المشاريع للأدمن (للتوافق)
-router.get('/portfolio', verifyToken, (req, res) => {
-  try {
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    res.json({ success: true, projects: db.projects || [] });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء جلب المشاريع' });
-  }
-});
-
-// ============== باقي المسارات (الإحصائيات، الفيديوهات، الإعدادات، إلخ) ==============
-
-// 1. جلب الإحصائيات الحالية للتعديل
-router.get('/stats', verifyToken, (req, res) => {
-  const data = await readData();
-  res.json({ success: true, stats: data.stats });
 });
 
 // 2. تحديث الإحصائيات
-router.put('/stats', verifyToken, (req, res) => {
+router.put('/stats', verifyToken, async (req, res) => {
   try {
     const { subscribers, views, videos } = req.body;
-
-    if (subscribers === undefined || views === undefined || videos === undefined) {
-      return res.status(400).json({ success: false, message: 'يرجى إرسال جميع الإحصائيات المطلوبة.' });
-    }
-
     const data = await readData();
     data.stats = {
       subscribers: parseInt(subscribers, 10) || 0,
       views: parseInt(views, 10) || 0,
       videos: parseInt(videos, 10) || 0
     };
-
-    writeData(data);
+    await writeData(data);
     res.json({ success: true, message: 'تم تحديث الإحصائيات بنجاح! 🎯', stats: data.stats });
   } catch (error) {
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث الإحصائيات.' });
   }
 });
 
-// 3. جلب قائمة الفيديوهات الحالية للتعديل
-router.get('/videos', verifyToken, (req, res) => {
-  const data = await readData();
-  res.json({ success: true, videos: data.videos });
+// 3. جلب الفيديوهات للإدارة
+router.get('/videos', verifyToken, async (req, res) => {
+  try {
+    const data = await readData();
+    res.json({ success: true, videos: data.videos || [] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء جلب الفيديوهات.' });
+  }
 });
 
-// 4. تحديث قائمة الفيديوهات بالكامل
-router.put('/videos', verifyToken, (req, res) => {
+// 4. تحديث الفيديوهات كاملة
+router.put('/videos', verifyToken, async (req, res) => {
   try {
     const { videos } = req.body;
-
-    if (!Array.isArray(videos)) {
-      return res.status(400).json({ success: false, message: 'يجب توفير مصفوفة للفيديوهات.' });
-    }
+    if (!Array.isArray(videos)) return res.status(400).json({ success: false, message: 'يجب توفير مصفوفة.' });
 
     const data = await readData();
     data.videos = videos.map((v, index) => ({
@@ -227,100 +197,90 @@ router.put('/videos', verifyToken, (req, res) => {
       title: (v.title || '').trim(),
       description: (v.description || '').trim()
     }));
-
-    writeData(data);
+    await writeData(data);
     res.json({ success: true, message: 'تم تحديث الفيديوهات بنجاح! 🎬', videos: data.videos });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث الفيديوهات.' });
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء التحديث.' });
   }
 });
 
-// 4.ب. إضافة فيديو جديد
-router.post('/videos', verifyToken, (req, res) => {
+// 4.ب إضافة فيديو منفرد
+router.post('/videos', verifyToken, async (req, res) => {
   try {
     const { youtubeId, title, description } = req.body;
-
-    if (!youtubeId || !title) {
-      return res.status(400).json({ success: false, message: 'يرجى ملء معرف الفيديو والعنوان.' });
-    }
+    if (!youtubeId || !title) return res.status(400).json({ success: false, message: 'الحقول مطلوبة' });
 
     const data = await readData();
     if (!data.videos) data.videos = [];
 
-    const newVideo = {
-      id: Date.now(),
-      youtubeId: youtubeId.trim(),
-      title: title.trim(),
-      description: (description || '').trim()
-    };
-
+    const newVideo = { id: Date.now(), youtubeId: youtubeId.trim(), title: title.trim(), description: (description || '').trim() };
     data.videos.push(newVideo);
-    writeData(data);
-
-    res.json({ success: true, message: 'تمت إضافة الفيديو الجديد بنجاح! 🚀🎬', videos: data.videos });
+    await writeData(data);
+    res.json({ success: true, message: 'تمت إضافة الفيديو بنجاح! 🚀🎬', videos: data.videos });
   } catch (error) {
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء إضافة الفيديو.' });
   }
 });
 
-// 4.ج. حذف فيديو معين
-router.delete('/videos/:id', verifyToken, (req, res) => {
+// 4.ج حذف فيديو منفرد
+router.delete('/videos/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const data = await readData();
-
     const index = data.videos.findIndex(v => v.id.toString() === id.toString() || v.id === parseInt(id));
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'الفيديو المطلوب غير موجود.' });
-    }
+    
+    if (index === -1) return res.status(404).json({ success: false, message: 'الفيديو غير موجود.' });
 
     data.videos.splice(index, 1);
-    writeData(data);
-
-    res.json({ success: true, message: 'تم حذف الفيديو بنجاح! 🗑️', videos: data.videos });
+    await writeData(data);
+    res.json({ success: true, message: 'تم حذف الفيديو بنجاح!', videos: data.videos });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء حذف الفيديو.' });
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء الحذف.' });
   }
 });
 
-// 5. جلب الإعدادات والروابط والعتاد بالكامل للإدارة
-router.get('/all-settings', verifyToken, (req, res) => {
-  const data = await readData();
-  res.json({
-    success: true,
-    settings: data.settings || {},
-    socials: data.socials || {},
-    faqs: data.faqs || [],
-    schedule: data.schedule || [],
-    gear: data.gear || []
-  });
+// 5. جلب كل الإعدادات دفعة واحدة للإدارة
+router.get('/all-settings', verifyToken, async (req, res) => {
+  try {
+    const data = await readData();
+    res.json({
+      success: true,
+      settings: data.settings || {},
+      socials: data.socials || {},
+      faqs: data.faqs || [],
+      schedule: data.schedule || [],
+      gear: data.gear || []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'فشل جلب الإعدادات العامة' });
+  }
 });
 
-// 6. تحديث إعدادات الواجهة
-router.put('/settings', verifyToken, (req, res) => {
+// 6. تحديث الإعدادات العامة
+router.put('/settings', verifyToken, async (req, res) => {
   try {
     const { channelHandle, heroTitle, heroSubtitle, heroDescription, themeColor, soundEnabled, customCursorEnabled } = req.body;
     const data = await readData();
 
     data.settings = {
-      channelHandle: (channelHandle || data.settings.channelHandle || '').trim(),
-      heroTitle: (heroTitle || data.settings.heroTitle || '').trim(),
-      heroSubtitle: (heroSubtitle || data.settings.heroSubtitle || '').trim(),
-      heroDescription: (heroDescription || data.settings.heroDescription || '').trim(),
-      themeColor: themeColor || data.settings.themeColor || 'cyberpunk',
+      channelHandle: (channelHandle || data.settings?.channelHandle || '').trim(),
+      heroTitle: (heroTitle || data.settings?.heroTitle || '').trim(),
+      heroSubtitle: (heroSubtitle || data.settings?.heroSubtitle || '').trim(),
+      heroDescription: (heroDescription || data.settings?.heroDescription || '').trim(),
+      themeColor: themeColor || data.settings?.themeColor || 'cyberpunk',
       soundEnabled: soundEnabled !== undefined ? soundEnabled : true,
       customCursorEnabled: customCursorEnabled !== undefined ? customCursorEnabled : true
     };
 
-    writeData(data);
+    await writeData(data);
     res.json({ success: true, message: 'تم حفظ الإعدادات العامة بنجاح! ⚙️', settings: data.settings });
   } catch (error) {
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء حفظ الإعدادات.' });
   }
 });
 
-// 7. تحديث روابط التواصل الاجتماعي
-router.put('/socials', verifyToken, (req, res) => {
+// 7. تحديث روابط السوشيال ميديا
+router.put('/socials', verifyToken, async (req, res) => {
   try {
     const { youtube, discord, tiktok, twitter, instagram } = req.body;
     const data = await readData();
@@ -333,7 +293,7 @@ router.put('/socials', verifyToken, (req, res) => {
       instagram: (instagram || '').trim()
     };
 
-    writeData(data);
+    await writeData(data);
     res.json({ success: true, message: 'تم تحديث روابط التواصل بنجاح! 🔗', socials: data.socials });
   } catch (error) {
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث الروابط.' });
@@ -341,61 +301,52 @@ router.put('/socials', verifyToken, (req, res) => {
 });
 
 // 8. تحديث الأسئلة الشائعة
-router.put('/faqs', verifyToken, (req, res) => {
+router.put('/faqs', verifyToken, async (req, res) => {
   try {
     const { faqs } = req.body;
-    if (!Array.isArray(faqs)) {
-      return res.status(400).json({ success: false, message: 'صيغة الأسئلة غير صحيحة.' });
-    }
+    if (!Array.isArray(faqs)) return res.status(400).json({ success: false, message: 'الصيغة غير صحيحة.' });
 
     const data = await readData();
     data.faqs = faqs;
-    writeData(data);
-
+    await writeData(data);
     res.json({ success: true, message: 'تم تحديث الأسئلة الشائعة بنجاح! ❓', faqs: data.faqs });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث الأسئلة الشائعة.' });
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء التحديث.' });
   }
 });
 
-// 9. تحديث جدول البث المباشر
-router.put('/schedule', verifyToken, (req, res) => {
+// 9. جدول البث
+router.put('/schedule', verifyToken, async (req, res) => {
   try {
     const { schedule } = req.body;
-    if (!Array.isArray(schedule)) {
-      return res.status(400).json({ success: false, message: 'صيغة جدول البث غير صحيحة.' });
-    }
+    if (!Array.isArray(schedule)) return res.status(400).json({ success: false, message: 'الصيغة غير صحيحة.' });
 
     const data = await readData();
     data.schedule = schedule;
-    writeData(data);
-
+    await writeData(data);
     res.json({ success: true, message: 'تم تحديث جدول البث بنجاح! 📅', schedule: data.schedule });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث جدول البث.' });
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء التحديث.' });
   }
 });
 
-// 10. تحديث مواصفات عتاد الجيمينج
-router.put('/gear', verifyToken, (req, res) => {
+// 10. العتاد (Gear)
+router.put('/gear', verifyToken, async (req, res) => {
   try {
     const { gear } = req.body;
-    if (!Array.isArray(gear)) {
-      return res.status(400).json({ success: false, message: 'صيغة العتاد غير صحيحة.' });
-    }
+    if (!Array.isArray(gear)) return res.status(400).json({ success: false, message: 'الصيغة غير صحيحة.' });
 
     const data = await readData();
     data.gear = gear;
-    writeData(data);
-
+    await writeData(data);
     res.json({ success: true, message: 'تم تحديث عتاد الجيمينج بنجاح! 🚀', gear: data.gear });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث عتاد الجيمينج.' });
+    res.status(500).json({ success: false, message: 'حدث خطأ أثناء التحديث.' });
   }
 });
 
-// 11. استعراض صندوق الرسائل
-router.get('/messages', verifyToken, (req, res) => {
+// 11. استعراض صندوق الرسائل الواردة
+router.get('/messages', verifyToken, async (req, res) => {
   try {
     const data = await readData();
     const sortedMessages = [...(data.messages || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -406,46 +357,42 @@ router.get('/messages', verifyToken, (req, res) => {
 });
 
 // 12. وضع علامة مقروءة على الرسالة
-router.put('/messages/:id/read', verifyToken, (req, res) => {
+router.put('/messages/:id/read', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const data = await readData();
-
-    const msg = data.messages.find(m => m.id === id);
-    if (!msg) {
-      return res.status(404).json({ success: false, message: 'الرسالة غير موجودة.' });
-    }
+    const msg = data.messages?.find(m => m.id === id);
+    
+    if (!msg) return res.status(404).json({ success: false, message: 'الرسالة غير موجودة.' });
 
     msg.read = true;
-    writeData(data);
-
+    await writeData(data);
     res.json({ success: true, message: 'تم وضع علامة مقروءة على الرسالة.', messages: data.messages });
   } catch (error) {
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء تحديث الرسالة.' });
   }
 });
 
-// 13. حذف رسالة معينة
-router.delete('/messages/:id', verifyToken, (req, res) => {
+// 13. حذف رسالة
+router.delete('/messages/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const data = await readData();
+    const messageIndex = data.messages?.findIndex(m => m.id === id);
 
-    const messageIndex = data.messages.findIndex(m => m.id === id);
-    if (messageIndex === -1) {
+    if (messageIndex === -1 || messageIndex === undefined) {
       return res.status(404).json({ success: false, message: 'الرسالة غير موجودة.' });
     }
 
     data.messages.splice(messageIndex, 1);
-    writeData(data);
-
+    await writeData(data);
     res.json({ success: true, message: 'تم حذف الرسالة بنجاح.' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'حدث خطأ أثناء حذف الرسالة.' });
   }
 });
 
-// 14. المزامنة التلقائية مع يوتيوب
+// 14. المزامنة التلقائية مع يوتيوب RSS
 router.post('/youtube/sync', verifyToken, async (req, res) => {
   try {
     const data = await readData();
@@ -458,48 +405,26 @@ router.post('/youtube/sync', verifyToken, async (req, res) => {
       }
     });
 
-    if (!channelRes.ok) {
-      return res.status(400).json({ success: false, message: `فشل الاتصال بقناة يوتيوب ${handle}` });
-    }
+    if (!channelRes.ok) return res.status(400).json({ success: false, message: `فشل الاتصال بقناة يوتيوب ${handle}` });
 
     const html = await channelRes.text();
-
     let channelId = null;
     const matchChannelId = html.match(/"channelId"\s*:\s*"(UC[^"]+)"/);
-    if (matchChannelId) {
-      channelId = matchChannelId[1];
-    } else {
-      const matchBrowseId = html.match(/"browseId"\s*:\s*"(UC[^"]+)"/);
-      if (matchBrowseId) {
-        channelId = matchBrowseId[1];
-      } else {
-        const matchMeta = html.match(/<meta itemprop="channelId" content="(UC[^"]+)"/);
-        if (matchMeta) {
-          channelId = matchMeta[1];
-        }
-      }
-    }
+    if (matchChannelId) channelId = matchChannelId[1];
 
-    if (!channelId) {
-      return res.status(400).json({ success: false, message: 'تعذر استخراج معرف القناة من يوتيوب تلقائياً.' });
-    }
+    if (!channelId) return res.status(400).json({ success: false, message: 'تعذر استخراج معرف القناة من يوتيوب تلقائياً.' });
 
     const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
     const rssRes = await fetch(rssUrl);
-
-    if (!rssRes.ok) {
-      return res.status(400).json({ success: false, message: 'فشل جلب قائمة الفيديوهات من تغذية يوتيوب RSS.' });
-    }
+    if (!rssRes.ok) return res.status(400).json({ success: false, message: 'فشل جلب قائمة الفيديوهات من تغذية يوتيوب RSS.' });
 
     const xml = await rssRes.text();
-
     const syncedVideos = [];
     const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
     let match;
 
     while ((match = entryRegex.exec(xml)) !== null && syncedVideos.length < 12) {
       const entryHtml = match[1];
-
       const videoIdMatch = entryHtml.match(/<yt:videoId>([^<]+)<\/yt:videoId>/);
       const videoId = videoIdMatch ? videoIdMatch[1].trim() : '';
 
@@ -507,40 +432,24 @@ router.post('/youtube/sync', verifyToken, async (req, res) => {
       let title = titleMatch ? titleMatch[1].trim() : '';
       title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 
-      const descMatch = entryHtml.match(/<media:description>([^<]*?)<\/media:description>/);
-      let description = descMatch ? descMatch[1].trim() : '';
-      description = description.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
-
-      if (description.length > 130) {
-        description = description.substring(0, 127) + '...';
-      }
-
       if (videoId && title) {
         syncedVideos.push({
           id: Date.now() + syncedVideos.length,
           youtubeId: videoId,
           title,
-          description: description || 'شاهد هذا الفيديو الحماسي والمميز على قناة OmarXGaming!'
+          description: 'شاهد هذا الفيديو الحماسي والمميز على قناة OmarXGaming!'
         });
       }
     }
 
-    if (syncedVideos.length === 0) {
-      return res.status(400).json({ success: false, message: 'لم يتم العثور على أي فيديوهات في القناة للمزامنة.' });
-    }
+    if (syncedVideos.length === 0) return res.status(400).json({ success: false, message: 'لم يتم العثور على فيديوهات للمزامنة.' });
 
     data.videos = syncedVideos;
-    writeData(data);
+    await writeData(data);
 
-    res.json({
-      success: true,
-      message: `تمت المزامنة وجلب أحدث ${syncedVideos.length} فيديوهات من قناتك بنجاح! 🎬✨`,
-      videos: data.videos
-    });
-
+    res.json({ success: true, message: `تمت المزامنة وجلب أحدث ${syncedVideos.length} فيديوهات بنجاح! 🎬✨`, videos: data.videos });
   } catch (error) {
-    console.error('YouTube Sync Error:', error);
-    res.status(500).json({ success: false, message: 'حدث خطأ غير متوقع أثناء محاولة مزامنة قناة يوتيوب.' });
+    res.status(500).json({ success: false, message: 'حدث خطأ غير متوقع أثناء محاولة مزامنة يوتيوب.' });
   }
 });
 
