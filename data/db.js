@@ -1,32 +1,37 @@
 import axios from 'axios';
+import dotenv from 'dotenv';
 
-// الروابط دي هتقرأ أوتوماتيك من الـ Environment Variables اللي هنضيفها في Render
+dotenv.config();
+
 const BIN_URL = process.env.BIN_URL;
 const MASTER_KEY = process.env.MASTER_KEY;
 
-// القيمة الافتراضية في حال حدوث أي خطأ
-const initialData = { stats: { subscribers: 0, views: 0, videos: 0 }, videos: [], messages: [] };
-
-// قراءة البيانات من JSONbin أونلاين
+// دالة جلب البيانات من JSONbin أونلاين
 export const readData = async () => {
   try {
+    if (!BIN_URL || !MASTER_KEY) {
+      throw new Error("Missing BIN_URL or MASTER_KEY in environment variables");
+    }
     const response = await axios.get(BIN_URL, {
       headers: {
-        'X-Master-Key': MASTER_KEY,
-        'X-Bin-Meta': 'false' // عشان يجيب البيانات مباشرة بدون الـ Metadata بتاعة الموقع
+        'X-Master-Key': MASTER_KEY
       }
     });
-    return response.data;
+    // JSONbin بيرجع البيانات جوة كائن اسمه record
+    return response.data.record || response.data;
   } catch (error) {
-    console.error('Error reading from online database:', error);
-    return initialData;
+    console.error('Error fetching data from JSONbin:', error.message);
+    throw error;
   }
 };
 
-// حفظ البيانات في JSONbin أونلاين
-export const writeData = async (data) => {
+// دالة حفظ وتحديث البيانات في JSONbin أونلاين
+export const writeData = async (newData) => {
   try {
-    await axios.put(BIN_URL, data, {
+    if (!BIN_URL || !MASTER_KEY) {
+      throw new Error("Missing BIN_URL or MASTER_KEY in environment variables");
+    }
+    await axios.put(BIN_URL, newData, {
       headers: {
         'Content-Type': 'application/json',
         'X-Master-Key': MASTER_KEY
@@ -34,7 +39,7 @@ export const writeData = async (data) => {
     });
     return true;
   } catch (error) {
-    console.error('Error writing to online database:', error);
-    return false;
+    console.error('Error updating data on JSONbin:', error.message);
+    throw error;
   }
 };
